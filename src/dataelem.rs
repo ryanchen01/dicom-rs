@@ -216,6 +216,12 @@ pub fn attribute_by_tag(id_or_tag: &str) -> Option<&'static DicomAttribute> {
         let (_, attr_idx) = TAG_INDEX[idx];
         return Some(&ATTRIBUTES[attr_idx]);
     }
+    // Fallback linear scan for cases where TAG_INDEX might not be perfectly sorted
+    for attr in ATTRIBUTES.iter() {
+        if attr.tag == normalized {
+            return Some(attr);
+        }
+    }
     None
 }
 
@@ -223,6 +229,12 @@ pub fn attribute_by_keyword(keyword: &str) -> Option<&'static DicomAttribute> {
     if let Ok(idx) = KEYWORD_INDEX.binary_search_by(|entry| entry.0.cmp(keyword)) {
         let (_, attr_idx) = KEYWORD_INDEX[idx];
         return Some(&ATTRIBUTES[attr_idx]);
+    }
+    // Fallback linear scan for cases where KEYWORD_INDEX might not be perfectly sorted
+    for attr in ATTRIBUTES.iter() {
+        if attr.keyword == keyword {
+            return Some(attr);
+        }
     }
     None
 }

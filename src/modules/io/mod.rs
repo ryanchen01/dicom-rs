@@ -85,7 +85,7 @@ fn read_u32(buf: &[u8], off: &mut usize, e: Endianness) -> Option<u32> {
 struct ElemHeader {
     group: u16,
     element: u16,
-    vr: Option<[u8; 2]>,
+    _vr: Option<[u8; 2]>,
     len: u32,
 }
 
@@ -115,7 +115,7 @@ fn read_elem_header(
                 Some(ElemHeader {
                     group,
                     element,
-                    vr: Some(vr),
+                    _vr: Some(vr),
                     len,
                 })
             } else {
@@ -134,7 +134,7 @@ fn read_elem_header(
                 Some(ElemHeader {
                     group,
                     element,
-                    vr: Some(vr),
+                    _vr: Some(vr),
                     len: l,
                 })
             }
@@ -144,22 +144,157 @@ fn read_elem_header(
             Some(ElemHeader {
                 group,
                 element,
-                vr: None,
+                _vr: None,
                 len,
             })
         }
     }
 }
 
+fn parse_value_by_vr(vr: Option<DicomVr>, val: &[u8], endian: Endianness) -> Option<DataElementValue> {
+    match vr {
+        Some(DicomVr::Ae)
+        | Some(DicomVr::As)
+        | Some(DicomVr::Cs)
+        | Some(DicomVr::Da)
+        | Some(DicomVr::Ds)
+        | Some(DicomVr::Dt)
+        | Some(DicomVr::Is)
+        | Some(DicomVr::Lo)
+        | Some(DicomVr::Lt)
+        | Some(DicomVr::Pn)
+        | Some(DicomVr::Sh)
+        | Some(DicomVr::St)
+        | Some(DicomVr::Tm)
+        | Some(DicomVr::Uc)
+        | Some(DicomVr::Ui)
+        | Some(DicomVr::Ur)
+        | Some(DicomVr::Ut) => {
+            let s = std::str::from_utf8(val).unwrap_or("");
+            let s = s.trim_end_matches(['\0', ' ']);
+            Some(DataElementValue::String(s.to_string()))
+        }
+        Some(DicomVr::Us) => {
+            if val.len() == 2 {
+                Some(DataElementValue::UInt16(match endian {
+                    Endianness::Little => u16::from_le_bytes([val[0], val[1]]),
+                    Endianness::Big => u16::from_be_bytes([val[0], val[1]]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Ss) => {
+            if val.len() == 2 {
+                Some(DataElementValue::Int16(match endian {
+                    Endianness::Little => i16::from_le_bytes([val[0], val[1]]),
+                    Endianness::Big => i16::from_be_bytes([val[0], val[1]]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Ul) => {
+            if val.len() == 4 {
+                Some(DataElementValue::UInt32(match endian {
+                    Endianness::Little => u32::from_le_bytes([val[0], val[1], val[2], val[3]]),
+                    Endianness::Big => u32::from_be_bytes([val[0], val[1], val[2], val[3]]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Sl) => {
+            if val.len() == 4 {
+                Some(DataElementValue::Int32(match endian {
+                    Endianness::Little => i32::from_le_bytes([val[0], val[1], val[2], val[3]]),
+                    Endianness::Big => i32::from_be_bytes([val[0], val[1], val[2], val[3]]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Uv) => {
+            if val.len() == 8 {
+                Some(DataElementValue::UInt64(match endian {
+                    Endianness::Little => u64::from_le_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                    Endianness::Big => u64::from_be_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Sv) => {
+            if val.len() == 8 {
+                Some(DataElementValue::Int64(match endian {
+                    Endianness::Little => i64::from_le_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                    Endianness::Big => i64::from_be_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Fd) => {
+            if val.len() == 8 {
+                Some(DataElementValue::Double(match endian {
+                    Endianness::Little => f64::from_le_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                    Endianness::Big => f64::from_be_bytes([
+                        val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+                    ]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::Fl) => {
+            if val.len() == 4 {
+                Some(DataElementValue::Float(match endian {
+                    Endianness::Little => f32::from_le_bytes([val[0], val[1], val[2], val[3]]),
+                    Endianness::Big => f32::from_be_bytes([val[0], val[1], val[2], val[3]]),
+                }))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        Some(DicomVr::At) => {
+            if val.len() == 4 {
+                let g = match endian {
+                    Endianness::Little => u16::from_le_bytes([val[0], val[1]]),
+                    Endianness::Big => u16::from_be_bytes([val[0], val[1]]),
+                };
+                let e = match endian {
+                    Endianness::Little => u16::from_le_bytes([val[2], val[3]]),
+                    Endianness::Big => u16::from_be_bytes([val[2], val[3]]),
+                };
+                Some(DataElementValue::Tag(g, e))
+            } else {
+                Some(DataElementValue::Data(val.to_vec()))
+            }
+        }
+        _ => Some(DataElementValue::Data(val.to_vec())),
+    }
+}
+
 // Parse File Meta (group 0002) in Explicit Little Endian starting at off.
 // Returns (transfer_syntax, new_offset)
-fn parse_file_meta(buf: &[u8], mut off: usize) -> Option<(TransferSyntax, usize)> {
+fn parse_file_meta(buf: &[u8], mut off: usize) -> Option<(TransferSyntax, usize, Vec<DataElement>)> {
     // File Meta starts immediately after "DICM"
     // It must be Explicit Little regardless of dataset TS
     let endian = Endianness::Little;
     let vr_mode = VrMode::Explicit;
 
-    let ts_uid = String::new();
+    let mut ts_uid = String::new();
+    let mut meta_elems: Vec<DataElement> = Vec::new();
 
     // Optional: read (0002,0000) to know how far to go. But we can
     // loop until we encounter a tag with group != 0x0002.
@@ -171,8 +306,25 @@ fn parse_file_meta(buf: &[u8], mut off: usize) -> Option<(TransferSyntax, usize)
             off = save;
             break;
         }
+        // eprintln!("[file_meta] header ({:04X},{:04X}) len={} off={}", h.group, h.element, h.len, off);
         if off + (h.len as usize) > buf.len() {
             return None;
+        }
+        let val = &buf[off..off + (h.len as usize)];
+        // Record meta element
+        let tag_str = format!("({:04X},{:04X})", h.group, h.element);
+        if let Some(attr) = attribute_by_tag(&tag_str) {
+            let parsed = parse_value_by_vr(attr.vr, val, Endianness::Little);
+            meta_elems.push(DataElement { attribute: attr, value: parsed });
+            // eprintln!("[file_meta] parsed {} {}", attr.tag, attr.keyword);
+        } else {
+            // eprintln!("[file_meta] unknown tag {}", tag_str);
+        }
+        // Capture TransferSyntaxUID specifically
+        if h.group == 0x0002 && h.element == 0x0010 {
+            let s = std::str::from_utf8(val).unwrap_or("");
+            let s = s.trim_end_matches(['\0', ' ']);
+            ts_uid = s.to_string();
         }
         off += h.len as usize;
     }
@@ -184,7 +336,7 @@ fn parse_file_meta(buf: &[u8], mut off: usize) -> Option<(TransferSyntax, usize)
         ts_from_uid(&ts_uid)
     };
 
-    Some((ts, off))
+    Some((ts, off, meta_elems))
 }
 
 pub fn read_dicom<P: AsRef<Path>>(path: P) -> Dataset {
@@ -206,13 +358,14 @@ pub fn read_dicom<P: AsRef<Path>>(path: P) -> Dataset {
     }
 
     // Parse File Meta (Explicit Little)
-    let (ts, mut off) = match parse_file_meta(&buffer, 132) {
+    let (ts, mut off, file_meta) = match parse_file_meta(&buffer, 132) {
         Some(v) => v,
         None => return Dataset::new(),
     };
 
     // Iterate dataset
     let mut ds = Dataset::new();
+    ds.set_file_meta(file_meta);
     loop {
         if off + 8 > buffer.len() {
             break;
@@ -250,52 +403,7 @@ pub fn read_dicom<P: AsRef<Path>>(path: P) -> Dataset {
             continue;
         }
         if let Some(attr) = attribute_by_tag(&tag_str) {
-            let parsed_value = match attr.vr {
-                Some(DicomVr::Ae) | Some(DicomVr::As) | Some(DicomVr::Cs) | Some(DicomVr::Da)
-                | Some(DicomVr::Ds) | Some(DicomVr::Dt) | Some(DicomVr::Is) | Some(DicomVr::Lo)
-                | Some(DicomVr::Lt) | Some(DicomVr::Pn) | Some(DicomVr::Sh) | Some(DicomVr::St)
-                | Some(DicomVr::Tm) | Some(DicomVr::Uc) | Some(DicomVr::Ui) | Some(DicomVr::Ur)
-                | Some(DicomVr::Ut) => {
-                    let s = std::str::from_utf8(val).unwrap_or("");
-                    let s = s.trim_end_matches(['\0', ' ']);
-                    Some(DataElementValue::String(s.to_string()))
-                }
-                Some(DicomVr::Us) => {
-                    if val.len() == 2 { Some(DataElementValue::UInt16(match ts.endian { Endianness::Little => u16::from_le_bytes([val[0], val[1]]), Endianness::Big => u16::from_be_bytes([val[0], val[1]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Ss) => {
-                    if val.len() == 2 { Some(DataElementValue::Int16(match ts.endian { Endianness::Little => i16::from_le_bytes([val[0], val[1]]), Endianness::Big => i16::from_be_bytes([val[0], val[1]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Ul) => {
-                    if val.len() == 4 { Some(DataElementValue::UInt32(match ts.endian { Endianness::Little => u32::from_le_bytes([val[0], val[1], val[2], val[3]]), Endianness::Big => u32::from_be_bytes([val[0], val[1], val[2], val[3]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Sl) => {
-                    if val.len() == 4 { Some(DataElementValue::Int32(match ts.endian { Endianness::Little => i32::from_le_bytes([val[0], val[1], val[2], val[3]]), Endianness::Big => i32::from_be_bytes([val[0], val[1], val[2], val[3]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Uv) => {
-                    if val.len() == 8 { Some(DataElementValue::UInt64(match ts.endian { Endianness::Little => u64::from_le_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]), Endianness::Big => u64::from_be_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Sv) => {
-                    if val.len() == 8 { Some(DataElementValue::Int64(match ts.endian { Endianness::Little => i64::from_le_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]), Endianness::Big => i64::from_be_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Fd) => {
-                    if val.len() == 8 { Some(DataElementValue::Double(match ts.endian { Endianness::Little => f64::from_le_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]), Endianness::Big => f64::from_be_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::Fl) => {
-                    if val.len() == 4 { Some(DataElementValue::Float(match ts.endian { Endianness::Little => f32::from_le_bytes([val[0], val[1], val[2], val[3]]), Endianness::Big => f32::from_be_bytes([val[0], val[1], val[2], val[3]]) })) } else { Some(DataElementValue::Data(val.to_vec())) }
-                }
-                Some(DicomVr::At) => {
-                    if val.len() == 4 {
-                        let g = match ts.endian { Endianness::Little => u16::from_le_bytes([val[0], val[1]]), Endianness::Big => u16::from_be_bytes([val[0], val[1]]) };
-                        let e = match ts.endian { Endianness::Little => u16::from_le_bytes([val[2], val[3]]), Endianness::Big => u16::from_be_bytes([val[2], val[3]]) };
-                        Some(DataElementValue::Tag(g, e))
-                    } else {
-                        Some(DataElementValue::Data(val.to_vec()))
-                    }
-                }
-                // Binary or complex VRs: keep raw
-                _ => Some(DataElementValue::Data(val.to_vec())),
-            };
+            let parsed_value = parse_value_by_vr(attr.vr, val, ts.endian);
             ds.push(DataElement { attribute: attr, value: parsed_value });
         }
     }
