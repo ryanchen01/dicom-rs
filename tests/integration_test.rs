@@ -9,5 +9,6 @@ fn it_works() {
 #[test]
 fn test_read_dicom() {
     let path = "test_data/Anonymized_20250717.dcm";
-    assert!(read_dicom(path));
+    let ds = read_dicom(path);
+    assert!(ds.elements().len() > 0);
 }
